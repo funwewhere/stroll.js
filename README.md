@@ -18,6 +18,9 @@ stroll.bind( document.getElementById( 'some-list' ) );
 
 // Bind via array of elements / jQuery object
 stroll.bind( $( '#main .some-list' ) );
+
+// set horizontal scroll direction
+stroll.bind( '#main ul', {isHorizontal : true});
 ```
 
 
