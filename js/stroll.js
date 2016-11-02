@@ -47,7 +47,7 @@
 	 */
 	function add( element, options ) {
 		// Only allow ul/ol
-		if( !element.nodeName || /^(ul|ol)$/i.test( element.nodeName ) === false ) {
+		if( !element.nodeName || /^(ul|ol|div)$/i.test( element.nodeName ) === false ) {
 			return false;
 		}
 		// Delete duplicates (but continue and re-bind this list to get the
@@ -56,7 +56,7 @@
 			remove( element );
 		}
 
-		var list = IS_TOUCH_DEVICE ? new TouchList( element ) : new List( element );
+		var list = IS_TOUCH_DEVICE ? new TouchList( element, !!( options && options.isHorizontal ) ) : new List( element );
 
 		// Handle options
 		if( options && options.live ) {
@@ -249,11 +249,17 @@
 	 * on webkit-overflow-scrolling since that makes it impossible
 	 * to read the up-to-date scroll position.
 	 */
-	function TouchList( element ) {
+	function TouchList( element, isHorizontal) {
 		this.element = element;
+		this.isHorizontal = isHorizontal;
 		this.element.style.overflow = 'hidden';
 
 		this.top = {
+			value: 0,
+			natural: 0
+		};
+
+		this.left = {
 			value: 0,
 			natural: 0
 		};
@@ -281,25 +287,47 @@
 	TouchList.prototype.sync = function() {
 		this.items = Array.prototype.slice.apply( this.element.children );
 
-		this.listHeight = this.element.offsetHeight;
+		if ( this.isHorizontal ) {
+			this.listWidth = this.element.offsetWidth;
 
-		var item;
+			var item;
 
-		// One loop to get the properties we need from the DOM
-		for( var i = 0, len = this.items.length; i < len; i++ ) {
-			item = this.items[i];
-			item._offsetHeight = item.offsetHeight;
-			item._offsetTop = item.offsetTop;
-			item._offsetBottom = item._offsetTop + item._offsetHeight;
-			item._state = '';
+			// One loop to get the properties we need from the DOM
+			for( var i = 0, len = this.items.length; i < len; i++ ) {
+				item = this.items[i];
+				item._offsetWidth = item.offsetWidth;
+				item._offsetLeft = item.offsetLeft;
+				item._offsetRight = item._offsetLeft + item._offsetWidth;
+				item._state = '';
 
-			// Animating opacity is a MAJOR performance hit on mobile so we can't allow it
-			item.style.opacity = 1;
+				// Animating opacity is a MAJOR performance hit on mobile so we can't allow it
+				item.style.opacity = 1;
+			}
+
+			this.left.natural = this.element.scrollLeft;
+			this.left.value = this.left.natural;
+			this.left.max = item._offsetRight - this.listWidth;
+		} else {
+			this.listHeight = this.element.offsetHeight;
+
+			var item;
+
+			// One loop to get the properties we need from the DOM
+			for (var i = 0, len = this.items.length; i < len; i++) {
+				item = this.items[i];
+				item._offsetHeight = item.offsetHeight;
+				item._offsetTop = item.offsetTop;
+				item._offsetBottom = item._offsetTop + item._offsetHeight;
+				item._state = '';
+
+				// Animating opacity is a MAJOR performance hit on mobile so we can't allow it
+				item.style.opacity = 1;
+			}
+
+			this.top.natural = this.element.scrollTop;
+			this.top.value = this.top.natural;
+			this.top.max = item._offsetBottom - this.listHeight;
 		}
-
-		this.top.natural = this.element.scrollTop;
-		this.top.value = this.top.natural;
-		this.top.max = item._offsetBottom - this.listHeight;
 
 		// Force an update
 		this.update( true );
@@ -336,7 +364,7 @@
 
 		if( event.touches.length === 1 ) {
 			this.touch.isActive = true;
-			this.touch.start = event.touches[0].clientY;
+			this.touch.start = this.isHorizontal ? event.touches[0].clientX : event.touches[0].clientY;
 			this.touch.previous = this.touch.start;
 			this.touch.value = this.touch.start;
 			this.touch.offset = 0;
@@ -361,11 +389,11 @@
 		if( event.touches.length === 1 ) {
 			var previous = this.touch.value;
 
-			this.touch.value = event.touches[0].clientY;
+			this.touch.value = this.isHorizontal ? event.touches[0].clientX : event.touches[0].clientY;
 			this.touch.lastMove = Date.now();
 
 			var sameDirection = ( this.touch.value > this.touch.previous && this.velocity < 0 )
-								|| ( this.touch.value < this.touch.previous && this.velocity > 0 );
+				                || ( this.touch.value < this.touch.previous && this.velocity > 0 );
 
 			if( this.touch.isAccellerating && sameDirection ) {
 				clearInterval( this.touch.accellerateTimeout );
@@ -397,7 +425,7 @@
 			this.velocity = 0;
 		}
 
-		this.top.value += this.touch.offset;
+		this.isHorizontal ? this.left.value += this.touch.offset : this.top.value += this.touch.offset;
 
 		// Reset the variables used to determne swipe speed
 		this.touch.offset = 0;
@@ -418,64 +446,128 @@
 	 * Apply past/future classes to list items outside of the viewport
 	 */
 	TouchList.prototype.update = function( force ) {
-		// Determine the desired scroll top position
-		var scrollTop = this.top.value + this.velocity + this.touch.offset;
+		if ( this.isHorizontal ) {
+			// Determine the desired scroll top position
+			var scrollLeft = this.left.value + this.velocity + this.touch.offset;
 
-		// Only scroll the list if there's input
-		if( this.velocity || this.touch.offset ) {
-			// Scroll the DOM and add on the offset from touch
-			this.element.scrollTop = scrollTop;
+			// Only scroll the list if there's input
+			if( this.velocity || this.touch.offset ) {
+				// Scroll the DOM and add on the offset from touch
+				this.element.scrollLeft = scrollLeft;
 
-			// Keep the scroll value within bounds
-			scrollTop = Math.max( 0, Math.min( this.element.scrollTop, this.top.max ) );
+				// Keep the scroll value within bounds
+				scrollLeft = Math.max( 0, Math.min( this.element.scrollLeft, this.left.max ) );
 
-			// Cache the currently set scroll top and touch offset
-			this.top.value = scrollTop - this.touch.offset;
-		}
+				// Cache the currently set scroll top and touch offset
+				this.left.value = scrollLeft - this.touch.offset;
+			}
 
-		// If there is no active touch, decay velocity
-		if( !this.touch.isActive || this.touch.isAccellerating ) {
-			this.velocity *= 0.95;
-		}
+			// If there is no active touch, decay velocity
+			if( !this.touch.isActive || this.touch.isAccellerating ) {
+				this.velocity *= 0.97;
+			}
 
-		// Cut off early, the last fraction of velocity doesn't have
-		// much impact on movement
-		if( Math.abs( this.velocity ) < 0.15 ) {
-			this.velocity = 0;
-		}
+			// Cut off early, the last fraction of velocity doesn't have
+			// much impact on movement
+			if( Math.abs( this.velocity ) < 0.15 ) {
+				this.velocity = 0;
+			}
 
-		// Only proceed if the scroll position has changed
-		if( scrollTop !== this.top.natural || force ) {
-			this.top.natural = scrollTop;
-			this.top.value = scrollTop - this.touch.offset;
+			// Only proceed if the scroll position has changed
+			if( scrollLeft !== this.left.natural || force ) {
+				this.left.natural = scrollLeft;
+				this.left.value = scrollLeft - this.touch.offset;
 
-			var scrollBottom = scrollTop + this.listHeight;
+				var scrollRight = scrollLeft + this.listWidth;
 
-			// One loop to make our changes to the DOM
-			for( var i = 0, len = this.items.length; i < len; i++ ) {
-				var item = this.items[i];
+				// One loop to make our changes to the DOM
+				for( var i = 0, len = this.items.length; i < len; i++ ) {
+					var item = this.items[i];
 
-				// Above list viewport
-				if( item._offsetBottom < scrollTop ) {
-					// Exclusion via string matching improves performance
-					if( this.velocity <= 0 && item._state !== 'past' ) {
-						item.classList.add( 'past' );
-						item._state = 'past';
+					// Above list viewport
+					if( item._offsetRight < scrollLeft ) {
+						// Exclusion via string matching improves performance
+						if( this.velocity <= 0 && item._state !== 'past' ) {
+							item.classList.add( 'past' );
+							item._state = 'past';
+						}
+					}
+					// Below list viewport
+					else if( item._offsetLeft > scrollRight ) {
+						// Exclusion via string matching improves performance
+						if( this.velocity >= 0 && item._state !== 'future' ) {
+							item.classList.add( 'future' );
+							item._state = 'future';
+						}
+					}
+					// Inside of list viewport
+					else if( item._state ) {
+						if( item._state === 'past' ) item.classList.remove( 'past' );
+						if( item._state === 'future' ) item.classList.remove( 'future' );
+						item._state = '';
 					}
 				}
-				// Below list viewport
-				else if( item._offsetTop > scrollBottom ) {
-					// Exclusion via string matching improves performance
-					if( this.velocity >= 0 && item._state !== 'future' ) {
-						item.classList.add( 'future' );
-						item._state = 'future';
+			}
+		} else {
+			// Determine the desired scroll top position
+			var scrollTop = this.top.value + this.velocity + this.touch.offset;
+
+			// Only scroll the list if there's input
+			if (this.velocity || this.touch.offset) {
+				// Scroll the DOM and add on the offset from touch
+				this.element.scrollTop = scrollTop;
+
+				// Keep the scroll value within bounds
+				scrollTop = Math.max(0, Math.min(this.element.scrollTop, this.top.max));
+
+				// Cache the currently set scroll top and touch offset
+				this.top.value = scrollTop - this.touch.offset;
+			}
+
+			// If there is no active touch, decay velocity
+			if (!this.touch.isActive || this.touch.isAccellerating) {
+				this.velocity *= 0.95;
+			}
+
+			// Cut off early, the last fraction of velocity doesn't have
+			// much impact on movement
+			if (Math.abs(this.velocity) < 0.15) {
+				this.velocity = 0;
+			}
+
+			// Only proceed if the scroll position has changed
+			if (scrollTop !== this.top.natural || force) {
+				this.top.natural = scrollTop;
+				this.top.value = scrollTop - this.touch.offset;
+
+				var scrollBottom = scrollTop + this.listHeight;
+
+				// One loop to make our changes to the DOM
+				for (var i = 0, len = this.items.length; i < len; i++) {
+					var item = this.items[i];
+
+					// Above list viewport
+					if (item._offsetBottom < scrollTop) {
+						// Exclusion via string matching improves performance
+						if (this.velocity <= 0 && item._state !== 'past') {
+							item.classList.add('past');
+							item._state = 'past';
+						}
 					}
-				}
-				// Inside of list viewport
-				else if( item._state ) {
-					if( item._state === 'past' ) item.classList.remove( 'past' );
-					if( item._state === 'future' ) item.classList.remove( 'future' );
-					item._state = '';
+					// Below list viewport
+					else if (item._offsetTop > scrollBottom) {
+						// Exclusion via string matching improves performance
+						if (this.velocity >= 0 && item._state !== 'future') {
+							item.classList.add('future');
+							item._state = 'future';
+						}
+					}
+					// Inside of list viewport
+					else if (item._state) {
+						if (item._state === 'past') item.classList.remove('past');
+						if (item._state === 'future') item.classList.remove('future');
+						item._state = '';
+					}
 				}
 			}
 		}
@@ -522,13 +614,13 @@
 
 	window.requestAnimFrame = (function(){
 		return  window.requestAnimationFrame       ||
-				window.webkitRequestAnimationFrame ||
-				window.mozRequestAnimationFrame    ||
-				window.oRequestAnimationFrame      ||
-				window.msRequestAnimationFrame     ||
-				function( callback ){
-					window.setTimeout(callback, 1000 / 60);
-				};
+			window.webkitRequestAnimationFrame ||
+			window.mozRequestAnimationFrame    ||
+			window.oRequestAnimationFrame      ||
+			window.msRequestAnimationFrame     ||
+			function( callback ){
+				window.setTimeout(callback, 1000 / 60);
+			};
 	})()
 
 })();
