@@ -27,9 +27,12 @@
 	function refresh() {
 		if( active ) {
 			requestAnimFrame( refresh );
-
+			active = false;
 			for( var i = 0, len = lists.length; i < len; i++ ) {
-				lists[i].update();
+				if (lists[i].isChanged()) {
+					active = true;
+					lists[i].update();
+				}
 			}
 		}
 	}
@@ -382,7 +385,13 @@
 			else {
 				this.velocity = 0;
 			}
+
+			if(!active){
+				active = true;
+				refresh();
+			}
 		}
+
 	}
 
 	TouchList.prototype.onTouchMove = function( event ) {
@@ -393,7 +402,7 @@
 			this.touch.lastMove = Date.now();
 
 			var sameDirection = ( this.touch.value > this.touch.previous && this.velocity < 0 )
-				                || ( this.touch.value < this.touch.previous && this.velocity > 0 );
+				|| ( this.touch.value < this.touch.previous && this.velocity > 0 );
 
 			if( this.touch.isAccellerating && sameDirection ) {
 				clearInterval( this.touch.accellerateTimeout );
@@ -441,6 +450,13 @@
 			event.preventDefault();
 		}
 	};
+
+	/**
+	 * judge the dom is changed to update
+	 */
+	TouchList.prototype.isChanged = function(){
+		return this.velocity != 0 || this.touch.isActive;
+	}
 
 	/**
 	 * Apply past/future classes to list items outside of the viewport
